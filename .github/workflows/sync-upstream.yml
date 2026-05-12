@@ -88,7 +88,7 @@ jobs:
 
           git push --force-with-lease --set-upstream origin "$SYNC_BRANCH"
 
-          pr_url="$(gh pr list --state open --base main --head "$SYNC_BRANCH" --json url --jq '.[0].url // empty')"
+          pr_number="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&head=${GITHUB_REPOSITORY_OWNER}:${SYNC_BRANCH}" --jq '.[0].number // empty')"
           pr_body="$(cat <<'BODY'
           This PR syncs updates from `ZhuLinsen/daily_stock_analysis`.
 
@@ -101,16 +101,33 @@ jobs:
           )"
           pr_body="${pr_body}"$'\n\n```text\n'"$(cat /tmp/upstream_commits.txt)"$'\n```'
 
-          if [ -n "$pr_url" ]; then
-            gh pr edit "$pr_url" --title "Sync upstream daily_stock_analysis updates" --body "$pr_body"
+          if [ -n "$pr_number" ]; then
+            pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${pr_number}"
             echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
           else
-            pr_url="$(gh pr create \
-              --base main \
-              --head "$SYNC_BRANCH" \
-              --title "Sync upstream daily_stock_analysis updates" \
-              --body "$pr_body")"
-            echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+            pr_payload="$(jq -n \
+              --arg title "Sync upstream daily_stock_analysis updates" \
+              --arg head "$SYNC_BRANCH" \
+              --arg base "main" \
+              --arg body "$pr_body" \
+              '{title: $title, head: $head, base: $base, body: $body}')"
+
+            if pr_json="$(gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls" --input - <<<"$pr_payload")"; then
+              pr_url="$(echo "$pr_json" | jq -r '.html_url')"
+              echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+            else
+              issue_body="$(cat <<'BODY'
+          The upstream sync branch was updated successfully, but GitHub Actions could not create a pull request automatically.
+
+          Please open a PR manually from `codex/upstream-sync` into `main`, or review repository Actions permissions.
+
+          Upstream commits:
+          BODY
+          )"
+              issue_body="${issue_body}"$'\n\n```text\n'"$(cat /tmp/upstream_commits.txt)"$'\n```'
+              gh issue create --title "Upstream sync branch ready" --body "$issue_body"
+              echo "pr_url=" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Report result
