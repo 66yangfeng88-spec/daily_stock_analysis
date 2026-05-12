@@ -80,6 +80,8 @@ jobs:
             exit 1
           fi
 
+          python -m py_compile src/core/pipeline.py src/services/system_config_service.py
+
           if git diff --quiet origin/main..HEAD; then
             echo "Merge produced no changes."
             echo "has_update=false" >> "$GITHUB_OUTPUT"
