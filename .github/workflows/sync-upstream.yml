@@ -61,13 +61,13 @@ jobs:
 
             ISSUE_TITLE="Upstream sync conflict"
             ISSUE_BODY="$(cat <<'BODY'
-An automatic upstream sync found new commits from `ZhuLinsen/daily_stock_analysis`, but they did not merge cleanly into this repository.
+          An automatic upstream sync found new commits from `ZhuLinsen/daily_stock_analysis`, but they did not merge cleanly into this repository.
 
-Please review the workflow logs and resolve the conflicts manually before upgrading the ECS deployment.
+          Please review the workflow logs and resolve the conflicts manually before upgrading the ECS deployment.
 
-Upstream commits:
-BODY
-)"
+          Upstream commits:
+          BODY
+          )"
             ISSUE_BODY="${ISSUE_BODY}"$'\n\n```text\n'"$(cat /tmp/upstream_commits.txt)"$'\n```\n\nConflict summary:\n\n```text\n'"$(cat /tmp/upstream_conflicts.txt)"$'\n```'
 
             existing_issue="$(gh issue list --state open --search "$ISSUE_TITLE in:title" --json number --jq '.[0].number // empty')"
@@ -90,15 +90,15 @@ BODY
 
           pr_url="$(gh pr list --state open --base main --head "$SYNC_BRANCH" --json url --jq '.[0].url // empty')"
           pr_body="$(cat <<'BODY'
-This PR syncs updates from `ZhuLinsen/daily_stock_analysis`.
+          This PR syncs updates from `ZhuLinsen/daily_stock_analysis`.
 
-The workflow already verified that the upstream changes merge without Git conflicts. Please review the diff before merging because this repository has ECS/WebUI/DingTalk customizations.
+          The workflow already verified that the upstream changes merge without Git conflicts. Please review the diff before merging because this repository has ECS/WebUI/DingTalk customizations.
 
-After this PR is merged, the ECS timer will pull `main` automatically before the next scheduled stock analysis run.
+          After this PR is merged, the ECS timer will pull `main` automatically before the next scheduled stock analysis run.
 
-Upstream commits:
-BODY
-)"
+          Upstream commits:
+          BODY
+          )"
           pr_body="${pr_body}"$'\n\n```text\n'"$(cat /tmp/upstream_commits.txt)"$'\n```'
 
           if [ -n "$pr_url" ]; then
