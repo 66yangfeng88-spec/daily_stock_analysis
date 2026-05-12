@@ -128,7 +128,12 @@ def render(
     sorted_results = sorted(results, key=lambda x: x.sentiment_score, reverse=True)
     grouped_enriched = [
         {"key": "buy", "emoji": "🟢", "label": labels["buy_label"], "items": []},
-        {"key": "hold", "emoji": "🟡", "label": labels["watch_label"], "items": []},
+        {
+            "key": "hold",
+            "emoji": "🟡",
+            "label": "持有/观望" if report_language == "zh" else "Hold/Watch",
+            "items": [],
+        },
         {"key": "sell", "emoji": "🔴", "label": labels["sell_label"], "items": []},
     ]
     grouped_by_key = {group["key"]: group["items"] for group in grouped_enriched}

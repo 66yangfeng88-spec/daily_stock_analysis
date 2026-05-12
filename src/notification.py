@@ -1471,9 +1471,10 @@ class NotificationService(
             f"> {len(results)} {labels['stock_unit_compact']} | 🟢{buy_count} 🟡{hold_count} 🔴{sell_count}",
             "",
         ]
+        hold_group_label = '持有/观望' if report_language == 'zh' else 'Hold/Watch'
         group_specs = [
             ('buy', '🟢', labels['buy_label']),
-            ('hold', '🟡', labels['watch_label']),
+            ('hold', '🟡', hold_group_label),
             ('sell', '🔴', labels['sell_label']),
         ]
         for group_key, group_emoji, group_label in group_specs:

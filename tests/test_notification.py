@@ -419,10 +419,10 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         )
 
         self.assertIn("## 🟢 Buy", out)
-        self.assertIn("## 🟡 Watch", out)
+        self.assertIn("## 🟡 Hold/Watch", out)
         self.assertIn("## 🔴 Sell", out)
-        self.assertLess(out.index("## 🟢 Buy"), out.index("## 🟡 Watch"))
-        self.assertLess(out.index("## 🟡 Watch"), out.index("## 🔴 Sell"))
+        self.assertLess(out.index("## 🟢 Buy"), out.index("## 🟡 Hold/Watch"))
+        self.assertLess(out.index("## 🟡 Hold/Watch"), out.index("## 🔴 Sell"))
         self.assertLess(out.index("BuyOne(BUY1)"), out.index("BuyTwo(BUY2)"))
         self.assertIn("\n- **BuyOne(BUY1)**", out)
         self.assertIn("\n- **HoldCo(HLD)**", out)
