@@ -2,11 +2,16 @@
 
 > {{ results|length }} {{ labels.stock_unit_compact }} | 🟢{{ buy_count }} 🟡{{ hold_count }} 🔴{{ sell_count }}
 
-{% for e in enriched %}
+{% for group in grouped_enriched if group["items"] %}
+## {{ group.emoji }} {{ group.label }}
+
+{% for e in group["items"] %}
 {% set dash = e.result.dashboard or {} %}
 {% set core = (dash.get('core_conclusion') or {}) if dash else {} %}
-{% set one = (core.get('one_sentence') or e.result.analysis_summary or '')[:60] %}
-**{{ e.stock_name }}({{ e.result.code }})** {{ e.signal_emoji }} {{ e.localized_operation_advice }} | {{ labels.score_label }} {{ e.result.sentiment_score }} | {{ one }}
+{% set one = (core.get('one_sentence') or e.result.analysis_summary or '')[:80] %}
+- **{{ e.stock_name }}({{ e.result.code }})** {{ e.signal_emoji }} {{ e.localized_operation_advice }} | {{ labels.score_label }} {{ e.result.sentiment_score }} | {{ one }}
+
+{% endfor %}
 {% endfor %}
 
 *{{ report_timestamp }}*

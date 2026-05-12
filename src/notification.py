@@ -37,6 +37,7 @@ from src.report_language import (
     get_localized_stock_name,
     get_report_labels,
     get_signal_level,
+    infer_decision_type_from_advice,
     localize_chip_health,
     localize_operation_advice,
     localize_trend_prediction,
@@ -1441,27 +1442,58 @@ class NotificationService(
         # Fallback: brief summary from dashboard report
         if not results:
             return f"# {report_date} {labels['brief_title']}\n\n{labels['no_results']}"
-        sorted_results = sorted(results, key=lambda x: x.sentiment_score, reverse=True)
-        buy_count = sum(1 for r in results if getattr(r, 'decision_type', '') == 'buy')
-        sell_count = sum(1 for r in results if getattr(r, 'decision_type', '') == 'sell')
-        hold_count = sum(1 for r in results if getattr(r, 'decision_type', '') in ('hold', ''))
+        def _brief_decision_type(result: AnalysisResult) -> str:
+            raw = str(getattr(result, 'decision_type', '') or '').strip().lower()
+            if raw in ('buy', 'sell'):
+                return raw
+            if raw in ('hold', 'watch', 'neutral'):
+                return 'hold'
+            return infer_decision_type_from_advice(
+                getattr(result, 'operation_advice', ''), default='hold'
+            )
+
+        grouped_results = {
+            'buy': [],
+            'hold': [],
+            'sell': [],
+        }
+        for r in results:
+            grouped_results[_brief_decision_type(r)].append(r)
+        for group in grouped_results.values():
+            group.sort(key=lambda x: x.sentiment_score, reverse=True)
+
+        buy_count = len(grouped_results['buy'])
+        sell_count = len(grouped_results['sell'])
+        hold_count = len(grouped_results['hold'])
         lines = [
             f"# {report_date} {labels['brief_title']}",
             "",
             f"> {len(results)} {labels['stock_unit_compact']} | 🟢{buy_count} 🟡{hold_count} 🔴{sell_count}",
             "",
         ]
-        for r in sorted_results:
-            _, emoji, _ = self._get_signal_level(r)
-            name = self._get_display_name(r, report_language)
-            dash = r.dashboard or {}
-            core = dash.get('core_conclusion', {}) or {}
-            one = (core.get('one_sentence') or r.analysis_summary or '')[:60]
-            lines.append(
-                f"**{name}({r.code})** {emoji} "
-                f"{localize_operation_advice(r.operation_advice, report_language)} | "
-                f"{labels['score_label']} {r.sentiment_score} | {one}"
-            )
+        group_specs = [
+            ('buy', '🟢', labels['buy_label']),
+            ('hold', '🟡', labels['watch_label']),
+            ('sell', '🔴', labels['sell_label']),
+        ]
+        for group_key, group_emoji, group_label in group_specs:
+            group = grouped_results[group_key]
+            if not group:
+                continue
+            lines.append(f"## {group_emoji} {group_label}")
+            lines.append("")
+            for r in group:
+                _, emoji, _ = self._get_signal_level(r)
+                name = self._get_display_name(r, report_language)
+                dash = r.dashboard or {}
+                core = dash.get('core_conclusion', {}) or {}
+                one = " ".join(str(core.get('one_sentence') or r.analysis_summary or '').split())[:80]
+                lines.append(
+                    f"- **{name}({r.code})** {emoji} "
+                    f"{localize_operation_advice(r.operation_advice, report_language)} | "
+                    f"{labels['score_label']} {r.sentiment_score} | {one}"
+                )
+                lines.append("")
         lines.append("")
         lines.append(f"*{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
         return "\n".join(lines)

@@ -19,6 +19,7 @@ from src.report_language import (
     get_localized_stock_name,
     get_report_labels,
     get_signal_level,
+    infer_decision_type_from_advice,
     localize_chip_health,
     localize_operation_advice,
     localize_trend_prediction,
@@ -113,24 +114,42 @@ def render(
     )
     labels = get_report_labels(report_language)
 
+    def _brief_decision_type(result: AnalysisResult) -> str:
+        raw = str(getattr(result, "decision_type", "") or "").strip().lower()
+        if raw in ("buy", "sell"):
+            return raw
+        if raw in ("hold", "watch", "neutral"):
+            return "hold"
+        return infer_decision_type_from_advice(
+            getattr(result, "operation_advice", ""), default="hold"
+        )
+
     # Build template context with pre-computed signal levels (sorted by score)
     sorted_results = sorted(results, key=lambda x: x.sentiment_score, reverse=True)
+    grouped_enriched = [
+        {"key": "buy", "emoji": "🟢", "label": labels["buy_label"], "items": []},
+        {"key": "hold", "emoji": "🟡", "label": labels["watch_label"], "items": []},
+        {"key": "sell", "emoji": "🔴", "label": labels["sell_label"], "items": []},
+    ]
+    grouped_by_key = {group["key"]: group["items"] for group in grouped_enriched}
     sorted_enriched = []
     for r in sorted_results:
         st, se, _ = get_signal_level(r.operation_advice, r.sentiment_score, report_language)
         rn = get_localized_stock_name(r.name, r.code, report_language)
-        sorted_enriched.append({
+        enriched_item = {
             "result": r,
             "signal_text": st,
             "signal_emoji": se,
             "stock_name": _escape_md(rn),
             "localized_operation_advice": localize_operation_advice(r.operation_advice, report_language),
             "localized_trend_prediction": localize_trend_prediction(r.trend_prediction, report_language),
-        })
+        }
+        sorted_enriched.append(enriched_item)
+        grouped_by_key[_brief_decision_type(r)].append(enriched_item)
 
-    buy_count = sum(1 for r in results if getattr(r, "decision_type", "") == "buy")
-    sell_count = sum(1 for r in results if getattr(r, "decision_type", "") == "sell")
-    hold_count = sum(1 for r in results if getattr(r, "decision_type", "") in ("hold", ""))
+    buy_count = len(grouped_by_key["buy"])
+    sell_count = len(grouped_by_key["sell"])
+    hold_count = len(grouped_by_key["hold"])
 
     report_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -142,6 +161,7 @@ def render(
         "report_timestamp": report_timestamp,
         "results": sorted_results,
         "enriched": sorted_enriched,  # Sorted by sentiment_score desc
+        "grouped_enriched": grouped_enriched,
         "summary_only": summary_only,
         "buy_count": buy_count,
         "sell_count": sell_count,

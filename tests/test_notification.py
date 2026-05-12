@@ -391,6 +391,43 @@ class TestNotificationServiceReportGeneration(unittest.TestCase):
         mock_brief.assert_called_once()
 
     @mock.patch("src.notification.get_config")
+    def test_generate_brief_report_groups_and_sorts_results(self, mock_get_config: mock.MagicMock):
+        mock_get_config.return_value = _make_config(report_renderer_enabled=False, report_language="en")
+        service = NotificationService()
+
+        def make_result(code: str, name: str, score: int, advice: str, decision_type: str) -> AnalysisResult:
+            return AnalysisResult(
+                code=code,
+                name=name,
+                sentiment_score=score,
+                trend_prediction="Bullish",
+                operation_advice=advice,
+                analysis_summary=f"{name} setup",
+                decision_type=decision_type,
+                report_language="en",
+                dashboard={"core_conclusion": {"one_sentence": f"{name} signal"}},
+            )
+
+        out = service.generate_brief_report(
+            [
+                make_result("HLD", "HoldCo", 88, "Hold", "hold"),
+                make_result("BUY2", "BuyTwo", 79, "Buy", "buy"),
+                make_result("SELL", "SellCo", 72, "Sell", "sell"),
+                make_result("BUY1", "BuyOne", 91, "Buy", "buy"),
+            ],
+            report_date="2026-05-13",
+        )
+
+        self.assertIn("## 🟢 Buy", out)
+        self.assertIn("## 🟡 Watch", out)
+        self.assertIn("## 🔴 Sell", out)
+        self.assertLess(out.index("## 🟢 Buy"), out.index("## 🟡 Watch"))
+        self.assertLess(out.index("## 🟡 Watch"), out.index("## 🔴 Sell"))
+        self.assertLess(out.index("BuyOne(BUY1)"), out.index("BuyTwo(BUY2)"))
+        self.assertIn("\n- **BuyOne(BUY1)**", out)
+        self.assertIn("\n- **HoldCo(HLD)**", out)
+
+    @mock.patch("src.notification.get_config")
     def test_generate_single_stock_report_keeps_legacy_simple_format(self, mock_get_config: mock.MagicMock):
         mock_get_config.return_value = _make_config(report_renderer_enabled=True)
         service = NotificationService()
