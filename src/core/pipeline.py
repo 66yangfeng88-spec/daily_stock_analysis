@@ -12,6 +12,7 @@ A股自选股智能分析系统 - 核心分析流水线
 """
 
 import logging
+import os
 import threading
 import time
 import uuid
@@ -162,6 +163,14 @@ class StockAnalysisPipeline:
                 exc_info=True,
             )
             self.social_sentiment_service = None
+
+    @staticmethod
+    def _resolve_report_type(value: Any, default: ReportType = ReportType.SIMPLE) -> ReportType:
+        if isinstance(value, ReportType):
+            return value
+        if value is None or str(value).strip() == "":
+            return default
+        return ReportType.from_str(str(value))
 
     def _emit_progress(self, progress: int, message: str) -> None:
         """Best-effort bridge from pipeline stages to task SSE progress."""
@@ -1739,20 +1748,22 @@ class StockAnalysisPipeline:
         # 单股推送模式（#55）：从配置读取
         single_stock_notify = getattr(self.config, 'single_stock_notify', False)
         # Issue #119: 从配置读取报告类型
-        report_type_str = getattr(self.config, 'report_type', 'simple').lower()
-        if report_type_str == 'brief':
-            report_type = ReportType.BRIEF
-        elif report_type_str == 'full':
-            report_type = ReportType.FULL
-        else:
-            report_type = ReportType.SIMPLE
+        report_type = self._resolve_report_type(getattr(self.config, 'report_type', 'simple'))
+        local_report_type = self._resolve_report_type(
+            os.getenv("LOCAL_REPORT_TYPE") or os.getenv("SAVED_REPORT_TYPE"),
+            default=report_type,
+        )
+        notification_report_type = self._resolve_report_type(
+            os.getenv("NOTIFICATION_REPORT_TYPE") or os.getenv("PUSH_REPORT_TYPE"),
+            default=report_type,
+        )
         # Issue #128: 从配置读取分析间隔
         analysis_delay = getattr(self.config, 'analysis_delay', 0)
 
         if single_stock_notify:
             logger.info(
                 "已启用单股推送模式：分析仍并发执行，通知改为在结果收集侧串行发送（报告类型: %s）",
-                report_type_str,
+                notification_report_type.value,
             )
         
         results: List[AnalysisResult] = []
@@ -1784,7 +1795,7 @@ class StockAnalysisPipeline:
                         if single_stock_notify and send_notification and not dry_run:
                             self._send_single_stock_notification(
                                 result,
-                                report_type=report_type,
+                                report_type=notification_report_type,
                                 fallback_code=code,
                             )
                     elif result and not result.success:
@@ -1831,20 +1842,20 @@ class StockAnalysisPipeline:
         
         # 保存报告到本地文件（无论是否推送通知都保存）
         if results and not dry_run:
-            self._save_local_report(results, report_type)
+            self._save_local_report(results, local_report_type)
 
         # 发送通知（单股推送模式下跳过汇总推送，避免重复）
         if results and send_notification and not dry_run:
             if single_stock_notify:
                 # 单股推送模式：只保存汇总报告，不再重复推送
                 logger.info("单股推送模式：跳过汇总推送，仅保存报告到本地")
-                self._send_notifications(results, report_type, skip_push=True)
+                self._send_notifications(results, notification_report_type, skip_push=True)
             elif merge_notification:
                 # 合并模式（Issue #190）：仅保存，不推送，由 main 层合并个股+大盘后统一发送
                 logger.info("合并推送模式：跳过本次推送，将在个股+大盘复盘后统一发送")
-                self._send_notifications(results, report_type, skip_push=True)
+                self._send_notifications(results, notification_report_type, skip_push=True)
             else:
-                self._send_notifications(results, report_type)
+                self._send_notifications(results, notification_report_type)
         
         return results
 
