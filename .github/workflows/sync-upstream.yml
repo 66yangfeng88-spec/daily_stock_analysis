@@ -1,0 +1,119 @@
+name: Sync upstream updates
+
+on:
+  schedule:
+    - cron: "30 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Check upstream and open PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Prepare upstream merge
+        id: sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: https://github.com/ZhuLinsen/daily_stock_analysis.git
+          SYNC_BRANCH: codex/upstream-sync
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream "$UPSTREAM_REPO" 2>/dev/null || true
+          git fetch upstream main
+          git fetch origin main
+
+          if ! git log --oneline HEAD..upstream/main > /tmp/upstream_commits.txt; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ ! -s /tmp/upstream_commits.txt ]; then
+            echo "No upstream commits to sync."
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_update=true" >> "$GITHUB_OUTPUT"
+          git checkout -B "$SYNC_BRANCH" origin/main
+
+          if ! git merge --no-edit upstream/main; then
+            git status --short > /tmp/upstream_conflicts.txt || true
+            git merge --abort || true
+
+            ISSUE_TITLE="Upstream sync conflict"
+            ISSUE_BODY="$(cat <<'BODY'
+An automatic upstream sync found new commits from `ZhuLinsen/daily_stock_analysis`, but they did not merge cleanly into this repository.
+
+Please review the workflow logs and resolve the conflicts manually before upgrading the ECS deployment.
+
+Upstream commits:
+BODY
+)"
+            ISSUE_BODY="${ISSUE_BODY}"$'\n\n```text\n'"$(cat /tmp/upstream_commits.txt)"$'\n```\n\nConflict summary:\n\n```text\n'"$(cat /tmp/upstream_conflicts.txt)"$'\n```'
+
+            existing_issue="$(gh issue list --state open --search "$ISSUE_TITLE in:title" --json number --jq '.[0].number // empty')"
+            if [ -n "$existing_issue" ]; then
+              gh issue comment "$existing_issue" --body "$ISSUE_BODY"
+              echo "Updated existing conflict issue #$existing_issue"
+            else
+              gh issue create --title "$ISSUE_TITLE" --body "$ISSUE_BODY"
+            fi
+            exit 1
+          fi
+
+          if git diff --quiet origin/main..HEAD; then
+            echo "Merge produced no changes."
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git push --force-with-lease --set-upstream origin "$SYNC_BRANCH"
+
+          pr_url="$(gh pr list --state open --base main --head "$SYNC_BRANCH" --json url --jq '.[0].url // empty')"
+          pr_body="$(cat <<'BODY'
+This PR syncs updates from `ZhuLinsen/daily_stock_analysis`.
+
+The workflow already verified that the upstream changes merge without Git conflicts. Please review the diff before merging because this repository has ECS/WebUI/DingTalk customizations.
+
+After this PR is merged, the ECS timer will pull `main` automatically before the next scheduled stock analysis run.
+
+Upstream commits:
+BODY
+)"
+          pr_body="${pr_body}"$'\n\n```text\n'"$(cat /tmp/upstream_commits.txt)"$'\n```'
+
+          if [ -n "$pr_url" ]; then
+            gh pr edit "$pr_url" --title "Sync upstream daily_stock_analysis updates" --body "$pr_body"
+            echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+          else
+            pr_url="$(gh pr create \
+              --base main \
+              --head "$SYNC_BRANCH" \
+              --title "Sync upstream daily_stock_analysis updates" \
+              --body "$pr_body")"
+            echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report result
+        if: steps.sync.outputs.has_update == 'true'
+        run: |
+          echo "Upstream sync PR: ${{ steps.sync.outputs.pr_url }}"
