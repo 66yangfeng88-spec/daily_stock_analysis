@@ -1,7 +1,7 @@
 name: 每日股票分析
 
 on:
-  # 手动触发；自动定时已迁移到 ECS systemd timer，避免重复推送
+  # 手动触发；自动定时已迁移到 Mac mini launchd，避免重复推送
   workflow_dispatch:
     inputs:
       mode:
