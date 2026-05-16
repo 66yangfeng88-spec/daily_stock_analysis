@@ -11,7 +11,7 @@ This fork is maintained and run from `/Users/y/Projects/daily_stock_analysis`.
   - WebUI follows `.env` (`WEBUI_HOST` / `WEBUI_PORT`).
 
 - `com.daily-stock-analysis.upstream-sync`
-  - Runs every Monday at 08:30 local time.
+  - Runs every Saturday at 08:30 local time.
   - Fetches `ZhuLinsen/daily_stock_analysis` as `upstream`.
   - Merges `upstream/main` into local `main`, runs `compileall`, and pushes `origin/main`.
   - If the working tree is dirty or a merge conflict occurs, it aborts and writes details to `logs/upstream_sync.log`.

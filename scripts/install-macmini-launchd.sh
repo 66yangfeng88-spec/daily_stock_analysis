@@ -53,7 +53,7 @@ cat > "$SYNC_PLIST" <<PLIST
   <key>StartCalendarInterval</key>
   <dict>
     <key>Weekday</key>
-    <integer>1</integer>
+    <integer>6</integer>
     <key>Hour</key>
     <integer>8</integer>
     <key>Minute</key>
@@ -79,4 +79,4 @@ launchctl kickstart -k "gui/$USER_ID/$SERVICE_LABEL"
 
 echo "Installed launchd jobs:"
 echo "  $SERVICE_LABEL: WebUI + daily scheduled analysis"
-echo "  $SYNC_LABEL: weekly upstream sync, Monday 08:30 local time"
+echo "  $SYNC_LABEL: weekly upstream sync, Saturday 08:30 local time"
